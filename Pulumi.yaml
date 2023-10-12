@@ -1,0 +1,6 @@
+name: iac-pulumi1
+runtime:
+  name: nodejs
+  options:
+    typescript: false
+description: Assignment_4
