@@ -1,4 +1,12 @@
 encryptionsalt: v1:5RNZM9z0uSM=:v1:zO2/J6j1Nk2Pw/eU:U0/j2XmjXK6vuARs54Nn/Y6Hu1P0Ug==
 config:
+  aws:region: ap-south-1
   aws:profile: dev
-  aws:region: us-east-1
+  vpcCidr: "10.0.0.0/16"
+  cidr: "10.0"
+  cidrEnd: "0/24"
+  vpcName: "my-vpc"
+  internetGatewayName: "my-igw"
+  publicRouteTableName: "public-route-table"
+  privateRouteTableName: "private-route-table"
+  publicRouteCidrBlock: "0.0.0.0/0"
