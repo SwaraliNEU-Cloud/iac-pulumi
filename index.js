@@ -1,8 +1,5 @@
 const pulumi = require("@pulumi/pulumi");
 const aws = require("@pulumi/aws");
-// const AWS = require('aws-sdk');
-// const ec2 = new AWS.EC2({ region: 'us-east-1' });
-
 // Create a pulumi.Config instance to access configuration settings
 const config = new pulumi.Config();
 // Use configuration settings or provide defaults
@@ -69,38 +66,6 @@ azs.then((az) => {
     }
   });
 
-  const example = aws.ec2.getAmi({
-    // executableUsers: ["admin"],
-    filters: [
-        {
-            name: "name",
-            values: ["webapp-ami-*"],
-        },
-        // {
-        //     name: "root-device-type",
-        //     values: ["ebs"],
-        // },
-        // {
-        //     name: "virtualization-type",
-        //     values: ["hvm"],
-        // },
-    ],
-    mostRecent: true,
-    // nameRegex: "^webapp-ami-\\d{3}",
-    // owners: ["admin"],
-    
-});
-
-const amiId = example.then(result => result.id);
-  
-  // ec2.describeImages(params, (err, data) => {
-  //   if (err) console.log(err, err.stack);
-  //   else {
-  //     const ami = data.Images[0]; // Get the most recent matching AMI
-  //     console.log(ami);
-  //   }
-  // });
-
 
 // Create an EC2 security group for your application
 const applicationSecurityGroup = new aws.ec2.SecurityGroup("appSecurityGroup", {
@@ -128,8 +93,9 @@ const applicationSecurityGroup = new aws.ec2.SecurityGroup("appSecurityGroup", {
 });
 
 // Create an EC2 instance
-const ec2Instance = amiId.then(ami => new aws.ec2.Instance("appEC2Instance", {
-  ami: ami, // Replace with your AMI ID
+
+const ec2Instance = new aws.ec2.Instance("appEC2Instance", {
+  ami: "ami-0707c65192d7786f7", // Replace with your AMI ID
   instanceType: "t2.micro",   // Modify as needed
   securityGroups: [applicationSecurityGroup.name],
   rootBlockDevice: {
@@ -139,10 +105,9 @@ const ec2Instance = amiId.then(ami => new aws.ec2.Instance("appEC2Instance", {
   },
   keyName: "test",
   // Add other instance parameters here
-}));
+});
 
 // Export values for reference
 exports.applicationSecurityGroupId = applicationSecurityGroup.id;
 exports.ec2InstanceId = ec2Instance.id;
-
 });
