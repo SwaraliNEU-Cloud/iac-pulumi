@@ -1,6 +1,5 @@
 const pulumi = require("@pulumi/pulumi");
 const aws = require("@pulumi/aws");
-
 // Create a pulumi.Config instance to access configuration settings
 const config = new pulumi.Config();
 // Use configuration settings or provide defaults
@@ -94,6 +93,7 @@ const applicationSecurityGroup = new aws.ec2.SecurityGroup("appSecurityGroup", {
 });
 
 // Create an EC2 instance
+
 const ec2Instance = new aws.ec2.Instance("appEC2Instance", {
   ami: "ami-0707c65192d7786f7", // Replace with your AMI ID
   instanceType: "t2.micro",   // Modify as needed
