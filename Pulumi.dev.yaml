@@ -1,6 +1,6 @@
 encryptionsalt: v1:5RNZM9z0uSM=:v1:zO2/J6j1Nk2Pw/eU:U0/j2XmjXK6vuARs54Nn/Y6Hu1P0Ug==
 config:
-  aws:region: ap-south-1
+  aws:region: us-east-1
   aws:profile: dev
   vpcCidr: "10.0.0.0/16"
   cidr: "10.0"
