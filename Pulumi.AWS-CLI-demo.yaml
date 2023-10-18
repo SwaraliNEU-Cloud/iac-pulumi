@@ -1,7 +1,7 @@
 encryptionsalt: v1:AwGOVccgR+E=:v1:Hme03oFwKYUIfbMM:L74exjR3Gijz4mMYAFTfRSJAMBSgBA==
 config:
   aws:profile: AWS-CLI-demo
-  aws:region: ap-south-1
+  aws:region: us-east-1
   iac-pulumi1:cidr: "10.0"
   iac-pulumi1:cidrEnd: 0/24
   iac-pulumi1:internetGatewayName: my-igw
