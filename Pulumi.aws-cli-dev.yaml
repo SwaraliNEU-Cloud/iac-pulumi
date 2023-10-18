@@ -1,0 +1,12 @@
+encryptionsalt: v1:84y0N4FJr/Y=:v1:R2iUnYNe78EINerk:umnyWsS6GMMpKGZAtYauroTXcoLMjA==
+config:
+  aws:profile: aws-cli-dev
+  aws:region: us-east-1
+  iac-pulumi1:cidr: "10.0"
+  iac-pulumi1:cidrEnd: 0/24
+  iac-pulumi1:internetGatewayName: my-igw
+  iac-pulumi1:privateRouteTableName: private-route-table
+  iac-pulumi1:publicRouteCidrBlock: 0.0.0.0/0
+  iac-pulumi1:publicRouteTableName: public-route-table
+  iac-pulumi1:vpcCidr: 10.0.0.0/16
+  iac-pulumi1:vpcName: my-vpc
