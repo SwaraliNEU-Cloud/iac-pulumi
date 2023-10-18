@@ -144,4 +144,5 @@ const ec2Instance = amiId.then(ami => new aws.ec2.Instance("appEC2Instance", {
 // Export values for reference
 exports.applicationSecurityGroupId = applicationSecurityGroup.id;
 exports.ec2InstanceId = ec2Instance.id;
+
 });
