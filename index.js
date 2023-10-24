@@ -1,5 +1,10 @@
 const pulumi = require("@pulumi/pulumi");
 const aws = require("@pulumi/aws");
+// const AWS = require('aws-sdk');
+// import { S3 } from '@aws-sdk/client-s3';
+
+// const rds = new AWS.RDS();
+
 // Create a pulumi.Config instance to access configuration settings
 const config = new pulumi.Config();
 // Use configuration settings or provide defaults
@@ -11,8 +16,12 @@ const internetGatewayName = config.require("internetGatewayName");
 const publicRouteTableName = config.require("publicRouteTableName");
 const privateRouteTableName = config.require("privateRouteTableName");
 const publicRouteCidrBlock = config.require("publicRouteCidrBlock");
+
 const vpc = new aws.ec2.Vpc(vpcName, {
   cidrBlock: vpcCidr,
+  tags: {
+    Name : vpcName
+  }
 });
 const igw = new aws.ec2.InternetGateway(internetGatewayName, {
   vpcId: vpc.id,
@@ -29,11 +38,15 @@ const publicRoute = new aws.ec2.Route(publicRouteTableName, {
 const privateRouteTable = new aws.ec2.RouteTable(privateRouteTableName, {
   vpcId: vpc.id,
 });
+
+
 const azs = aws.getAvailabilityZones();
 const calculateCidrBlock = (index, subnetType) => {
   const subnetNumber = subnetType === "public" ? index * 2 : index * 2 + 1;
   return `${cidr}.${subnetNumber}.${cidrEnd}`;
 };
+const privateSubnets = []
+const publicSubnets = []
 azs.then((az) => {
   const maxSubnets = 6;
   let subnetCount = 0;
@@ -62,6 +75,11 @@ azs.then((az) => {
         subnetId: subnet.id,
         routeTableId: routeTable.id,
       });
+      if (subnetType === "private") {
+        privateSubnets.push(subnet);
+      } else {
+        publicSubnets.push(subnet);
+      }
       subnetCount++;
     }
   });
@@ -89,25 +107,124 @@ const applicationSecurityGroup = new aws.ec2.SecurityGroup("appSecurityGroup", {
     toPort: 8080,   // Replace with the port your application uses
     protocol: "tcp",
     cidrBlocks: ["0.0.0.0/0"],
-  }],
+  }
+],
+  egress: [
+  {
+    fromPort: 3306,      // Allow outbound traffic on port 3306
+    toPort: 3306,        // Allow outbound traffic on port 3306
+    protocol: "tcp",     // TCP protocol
+    cidrBlocks: ["0.0.0.0/0"],  // Allow all destinations
+  },
+],
+
+  vpcId: vpc.id,
 });
 
-// Create an EC2 instance
+// //Security Group
 
+const rdsSecurityGroup = new aws.ec2.SecurityGroup("rds-security-group", {
+  description: "Security group for RDS instances",
+  vpcId: vpc.id, // Replace with your VPC ID
+});
+
+// Create an ingress rule to allow traffic from your application's security group.
+const ingressRule = new aws.ec2.SecurityGroupRule("rds-ingress-rule", {
+  type: "ingress",
+  fromPort: 3306, // Change to 5432 for PostgreSQL
+  toPort: 3306, // Change to 5432 for PostgreSQL
+  protocol: "tcp",
+  sourceSecurityGroupId: applicationSecurityGroup.id, // Replace with your app's security group ID
+  securityGroupId: rdsSecurityGroup.id,
+});
+
+// Restrict access to the instance from the internet.
+const egressRule = new aws.ec2.SecurityGroupRule("rds-egress-rule", {
+  type: "egress",
+  fromPort: 0,
+  toPort: 65535,
+  protocol: "tcp",
+  cidrBlocks: ["0.0.0.0/0"],
+  securityGroupId: rdsSecurityGroup.id,
+});
+
+
+
+//Parameter group
+
+// Define the custom parameter group name
+const customParameterGroupName = 'new-custom-db-param-group-set';
+
+
+const rds_db_param_group = new aws.rds.ParameterGroup(customParameterGroupName, {
+  family: 'mysql8.0',
+  description: 'Custom RDS parameter group for cross-AZ communication',
+  });
+
+// //RDS instance
+
+const rds_private_subnet_1 = privateSubnets[0]
+const rds_private_subnet_2 = privateSubnets[1]
+const myDbSubnetGroup = new aws.rds.SubnetGroup("my-custom-rds-subnet-group", {
+  subnetIds: [rds_private_subnet_1, rds_private_subnet_2],
+});
+
+const rds_instance = new aws.rds.Instance("csye6225", {
+  allocatedStorage: 20,
+  dbName: "csye6225",
+  engine: "mysql",
+  instanceClass: "db.t2.micro",
+  parameterGroupName: rds_db_param_group.name,
+  password: "abc123#*KL",
+  skipFinalSnapshot: true,
+  username: "csye6225",
+  dbSubnetGroupName: myDbSubnetGroup.name,
+  vpcSecurityGroupIds: [rdsSecurityGroup.id],
+  multiAz: false
+  // availabilityZone: "us-east-1a",
+});
+
+
+// rds_instance.apply(vpcName => console.log("vpc name : ${vpcName}"))
+
+const myUserData = pulumi.interpolate`#cloud-config
+runcmd:
+  - echo "starting cloud-init script - 5.0"
+  - echo "cloud config executing. Waiting for rds to get created..."
+  - echo "wait is over and rds is created"
+  - touch /home/admin/.env
+  - echo ".env is created"
+  - echo "DB_ENDPOINT=${rds_instance.endpoint}" >> /home/admin/.env
+  - echo "db host assigned in .env file"
+  - echo "DB_USER='csye6225'" >> /home/admin/.env
+  - echo "DB_PASSWORD='abc123#*KL'" >> /home/admin/.env
+  - echo "DB_NAME='csye6225'" >> /home/admin/.env
+  - echo "really desperate now... check if all .env vars are there..."
+`
+
+// Create an EC2 instance
+const ec2Subnet = publicSubnets[0]
 const ec2Instance = new aws.ec2.Instance("appEC2Instance", {
-  ami: "ami-0707c65192d7786f7", // Replace with your AMI ID
+  ami: "ami-0fef0920f4fa63a90", // Replace with your AMI ID
   instanceType: "t2.micro",   // Modify as needed
-  securityGroups: [applicationSecurityGroup.name],
+  // securityGroups: [applicationSecurityGroup.name],
+  vpcId: vpc.id,
   rootBlockDevice: {
     volumeSize: 25,             // Root Volume Size
     volumeType: "gp2",         // Root Volume Type
     deleteOnTermination: true, // Ensure EBS volumes are terminated when the instance is terminated
   },
   keyName: "test",
+  vpcSecurityGroupIds: [applicationSecurityGroup.id],
+  subnetId: ec2Subnet.id,
+  userData: myUserData,
   // Add other instance parameters here
-});
+}, { dependsOn: [rds_instance] });
 
 // Export values for reference
 exports.applicationSecurityGroupId = applicationSecurityGroup.id;
 exports.ec2InstanceId = ec2Instance.id;
+exports.rdsSecurityGroupId = rdsSecurityGroup.id;
 });
+
+
