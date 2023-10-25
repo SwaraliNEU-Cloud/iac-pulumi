@@ -175,7 +175,7 @@ const rds_instance = new aws.rds.Instance("csye6225", {
   engine: "mysql",
   instanceClass: "db.t2.micro",
   parameterGroupName: rds_db_param_group.name,
-  password: "abc123#*KL",
+  password: "abc12345",
   skipFinalSnapshot: true,
   username: "csye6225",
   dbSubnetGroupName: myDbSubnetGroup.name,
@@ -185,27 +185,33 @@ const rds_instance = new aws.rds.Instance("csye6225", {
 });
 
 
+
 // rds_instance.apply(vpcName => console.log("vpc name : ${vpcName}"))
 
-const myUserData = pulumi.interpolate`#cloud-config
-runcmd:
-  - echo "starting cloud-init script - 5.0"
-  - echo "cloud config executing. Waiting for rds to get created..."
-  - echo "wait is over and rds is created"
-  - touch /home/admin/.env
-  - echo ".env is created"
-  - echo "DB_ENDPOINT=${rds_instance.endpoint}" >> /home/admin/.env
-  - echo "db host assigned in .env file"
-  - echo "DB_USER='csye6225'" >> /home/admin/.env
-  - echo "DB_PASSWORD='abc123#*KL'" >> /home/admin/.env
-  - echo "DB_NAME='csye6225'" >> /home/admin/.env
-  - echo "really desperate now... check if all .env vars are there..."
-`
+// const myUserData = pulumi.interpolate`#cloud-config
+// runcmd:
+//   - echo "Starting cloud-init script - 5.0"
+//   - echo "Cloud config executing. Waiting for RDS to get created..."
+//   - echo "Wait is over, and RDS is created"
+
+//   # Check if .env file exists and delete it
+//   - if [ -f /home/admin/.env ]; then rm /home/admin/.env; fi
+//   - touch /home/admin/.env
+//   - echo ".env is created"
+//   - echo "DB_ENDPOINT=${rds_instance.endpoint}" >> /home/admin/.env
+//   - echo "DB host assigned in .env file"
+//   - echo "DB_USER='csye6225'" >> /home/admin/.env
+//   - echo "DB_PASSWORD='abc123#*KL'" >> /home/admin/.env
+//   - echo "DB_NAME='csye6225'" >> /home/admin/.env
+//   - echo "All .env vars are set."
+
+// # Add other commands as needed
+// `;
 
 // Create an EC2 instance
 const ec2Subnet = publicSubnets[0]
 const ec2Instance = new aws.ec2.Instance("appEC2Instance", {
-  ami: "ami-0fef0920f4fa63a90", // Replace with your AMI ID
+  ami: "ami-04118116ee2a4973b", // Replace with your AMI ID
   instanceType: "t2.micro",   // Modify as needed
   // securityGroups: [applicationSecurityGroup.name],
   vpcId: vpc.id,
@@ -213,18 +219,35 @@ const ec2Instance = new aws.ec2.Instance("appEC2Instance", {
     volumeSize: 25,             // Root Volume Size
     volumeType: "gp2",         // Root Volume Type
     deleteOnTermination: true, // Ensure EBS volumes are terminated when the instance is terminated
+
   },
+  
   keyName: "test",
   vpcSecurityGroupIds: [applicationSecurityGroup.id],
   subnetId: ec2Subnet.id,
-  userData: myUserData,
-  // Add other instance parameters here
-}, { dependsOn: [rds_instance] });
+  userData: pulumi.interpolate`
+  #!/bin/bash
+  echo "NODE_ENV=production" >> /etc/environment
+  endpoint="${rds_instance.endpoint}"
+  echo "DB_HOST=\${endpoint%:*}" >> /etc/environment
+  echo DB_USER=csye6225 >> /etc/environment
+  echo DB_PASSWORD=abc12345 >> /etc/environment
+  echo DB_NAME=csye6225 >> /etc/environment
+  sudo systemctl daemon-reload
+  sudo systemctl enable webapp
+  sudo systemctl start webapp
+`.apply(s => s.trim()),
+   // userData: myUserData,
+  
+
+  });
+
+// }, { dependsOn: [rds_instance] });
 
 // Export values for reference
 exports.applicationSecurityGroupId = applicationSecurityGroup.id;
 exports.ec2InstanceId = ec2Instance.id;
 exports.rdsSecurityGroupId = rdsSecurityGroup.id;
-});
 
+});
 
