@@ -151,7 +151,6 @@ const egressRule = new aws.ec2.SecurityGroupRule("rds-egress-rule", {
 
 
 //Parameter group
-
 // Define the custom parameter group name
 const customParameterGroupName = 'new-custom-db-param-group-set';
 
@@ -186,6 +185,7 @@ const rds_instance = new aws.rds.Instance("csye6225", {
 
 
 
+
 // rds_instance.apply(vpcName => console.log("vpc name : ${vpcName}"))
 
 // const myUserData = pulumi.interpolate`#cloud-config
@@ -207,6 +207,22 @@ const rds_instance = new aws.rds.Instance("csye6225", {
 
 // # Add other commands as needed
 // `;
+// rds_instance.apply(vpcName => console.log("vpc name : ${vpcName}"))
+
+const myUserData = pulumi.interpolate`#cloud-config
+runcmd:
+  - echo "starting cloud-init script - 5.0"
+  - echo "cloud config executing. Waiting for rds to get created..."
+  - echo "wait is over and rds is created"
+  - touch /home/admin/.env
+  - echo ".env is created"
+  - echo "DB_ENDPOINT=${rds_instance.endpoint}" >> /home/admin/.env
+  - echo "db host assigned in .env file"
+  - echo "DB_USER='csye6225'" >> /home/admin/.env
+  - echo "DB_PASSWORD='abc123#*KL'" >> /home/admin/.env
+  - echo "DB_NAME='csye6225'" >> /home/admin/.env
+  - echo "really desperate now... check if all .env vars are there..."
+`
 
 // Create an EC2 instance
 const ec2Subnet = publicSubnets[0]
@@ -225,6 +241,7 @@ const ec2Instance = new aws.ec2.Instance("appEC2Instance", {
   keyName: "test",
   vpcSecurityGroupIds: [applicationSecurityGroup.id],
   subnetId: ec2Subnet.id,
+
   userData: pulumi.interpolate`
   #!/bin/bash
   echo "NODE_ENV=production" >> /etc/environment
@@ -248,6 +265,5 @@ const ec2Instance = new aws.ec2.Instance("appEC2Instance", {
 exports.applicationSecurityGroupId = applicationSecurityGroup.id;
 exports.ec2InstanceId = ec2Instance.id;
 exports.rdsSecurityGroupId = rdsSecurityGroup.id;
-
 });
 
