@@ -1,9 +1,6 @@
 const pulumi = require("@pulumi/pulumi");
 const aws = require("@pulumi/aws");
 // const AWS = require('aws-sdk');
-// import { S3 } from '@aws-sdk/client-s3';
-
-// const rds = new AWS.RDS();
 
 // Create a pulumi.Config instance to access configuration settings
 const config = new pulumi.Config();
@@ -116,6 +113,12 @@ const applicationSecurityGroup = new aws.ec2.SecurityGroup("appSecurityGroup", {
     protocol: "tcp",     // TCP protocol
     cidrBlocks: ["0.0.0.0/0"],  // Allow all destinations
   },
+  {
+    fromPort: 443, // HTTPS (CloudWatch Logs endpoint)
+    toPort: 443,   // HTTPS (CloudWatch Logs endpoint)
+    protocol: "tcp",
+    cidrBlocks: ["0.0.0.0/0"], // Allow outbound traffic to the internet
+  },
 ],
 
   vpcId: vpc.id,
@@ -148,12 +151,10 @@ const egressRule = new aws.ec2.SecurityGroupRule("rds-egress-rule", {
   securityGroupId: rdsSecurityGroup.id,
 });
 
-
-
 //Parameter group
+
 // Define the custom parameter group name
 const customParameterGroupName = 'new-custom-db-param-group-set';
-
 
 const rds_db_param_group = new aws.rds.ParameterGroup(customParameterGroupName, {
   family: 'mysql8.0',
@@ -184,64 +185,88 @@ const rds_instance = new aws.rds.Instance("csye6225", {
 });
 
 
-
-
-// rds_instance.apply(vpcName => console.log("vpc name : ${vpcName}"))
-
-// const myUserData = pulumi.interpolate`#cloud-config
-// runcmd:
-//   - echo "Starting cloud-init script - 5.0"
-//   - echo "Cloud config executing. Waiting for RDS to get created..."
-//   - echo "Wait is over, and RDS is created"
-
-//   # Check if .env file exists and delete it
-//   - if [ -f /home/admin/.env ]; then rm /home/admin/.env; fi
-//   - touch /home/admin/.env
-//   - echo ".env is created"
-//   - echo "DB_ENDPOINT=${rds_instance.endpoint}" >> /home/admin/.env
-//   - echo "DB host assigned in .env file"
-//   - echo "DB_USER='csye6225'" >> /home/admin/.env
-//   - echo "DB_PASSWORD='abc123#*KL'" >> /home/admin/.env
-//   - echo "DB_NAME='csye6225'" >> /home/admin/.env
-//   - echo "All .env vars are set."
-
-// # Add other commands as needed
-// `;
-// rds_instance.apply(vpcName => console.log("vpc name : ${vpcName}"))
-
-const myUserData = pulumi.interpolate`#cloud-config
-runcmd:
-  - echo "starting cloud-init script - 5.0"
-  - echo "cloud config executing. Waiting for rds to get created..."
-  - echo "wait is over and rds is created"
-  - touch /home/admin/.env
-  - echo ".env is created"
-  - echo "DB_ENDPOINT=${rds_instance.endpoint}" >> /home/admin/.env
-  - echo "db host assigned in .env file"
-  - echo "DB_USER='csye6225'" >> /home/admin/.env
-  - echo "DB_PASSWORD='abc123#*KL'" >> /home/admin/.env
-  - echo "DB_NAME='csye6225'" >> /home/admin/.env
-  - echo "really desperate now... check if all .env vars are there..."
-`
-
-// Create an EC2 instance
 const ec2Subnet = publicSubnets[0]
+
+
+
+const domainName = ""; // Replace with your actual domain name
+const port = "8080"; // Replace with your desired port
+
+const hostedZone = "Z004800715YBRB44PUMAI"; // Replace with the Route 53 hosted zone ID
+
+// Z004800715YBRB44PUMAI   #demo
+
+// Z0020495E5MMQXTBZK11
+
+// Create an IAM role
+const role = new aws.iam.Role("myIAMRole", {
+  name: "my-iam-role", // Replace with your desired name
+  assumeRolePolicy: JSON.stringify({
+      Version: "2012-10-17",
+      Statement: [
+          {
+              Action: "sts:AssumeRole",
+              Effect: "Allow",
+              Principal: {
+                  Service: "ec2.amazonaws.com" // or other trusted services
+              }
+          }
+      ]
+  })
+});
+
+// Create an IAM Policy
+const policy = new aws.iam.Policy("examplePolicy", {
+  policy: JSON.stringify({
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Effect: "Allow",
+          Action: [
+              "logs:CreateLogGroup",
+              "logs:CreateLogStream",
+              "logs:PutLogEvents",
+              "logs:DescribeLogStreams",
+              "cloudwatch:PutMetricData",
+              "cloudwatch:GetMetricData",
+              "cloudwatch:GetMetricStatistics",
+              "cloudwatch:ListMetrics",
+              "ec2:DescribeTags"
+          ],
+          Resource: "*"
+      }
+      ],
+  }),
+});
+
+// Attach the Policy to the Role
+const rolePolicyAttachment = new aws.iam.RolePolicyAttachment("RolePolicyAttachment", {
+  policyArn: policy.arn,
+  role: role.name,
+});
+module.exports = { role };
+
+// Create an IAM Instance Profile
+const instanceProfile = new aws.iam.InstanceProfile("InstanceProfile", {
+  role: role.name,
+});
+
 const ec2Instance = new aws.ec2.Instance("appEC2Instance", {
-  ami: "ami-04118116ee2a4973b", // Replace with your AMI ID
+  ami: "ami-0f847f666817751e9", // Replace with your AMI ID
   instanceType: "t2.micro",   // Modify as needed
   // securityGroups: [applicationSecurityGroup.name],
   vpcId: vpc.id,
+  // iamInstanceProfile: role.name,
   rootBlockDevice: {
     volumeSize: 25,             // Root Volume Size
     volumeType: "gp2",         // Root Volume Type
     deleteOnTermination: true, // Ensure EBS volumes are terminated when the instance is terminated
 
   },
-  
   keyName: "test",
   vpcSecurityGroupIds: [applicationSecurityGroup.id],
   subnetId: ec2Subnet.id,
-
+  iamInstanceProfile: instanceProfile.name,
   userData: pulumi.interpolate`
   #!/bin/bash
   echo "NODE_ENV=production" >> /etc/environment
@@ -250,20 +275,34 @@ const ec2Instance = new aws.ec2.Instance("appEC2Instance", {
   echo DB_USER=csye6225 >> /etc/environment
   echo DB_PASSWORD=abc12345 >> /etc/environment
   echo DB_NAME=csye6225 >> /etc/environment
-  sudo systemctl daemon-reload
-  sudo systemctl enable webapp
   sudo systemctl start webapp
 `.apply(s => s.trim()),
-   // userData: myUserData,
-  
+   tags: {
+    Name: "my-instance", // Set your desired instance name
+  },
 
   });
 
-// }, { dependsOn: [rds_instance] });
+  const record = new aws.route53.Record("webapproutelink", {
+    name: domainName,
+    type: "A",
+    zoneId: hostedZone,
+    ttl: 300,
+    records: [ec2Instance.publicIp],
+  });
 
+// Export the instance profile name and role name
+exports.roleName = role.name;
 // Export values for reference
 exports.applicationSecurityGroupId = applicationSecurityGroup.id;
 exports.ec2InstanceId = ec2Instance.id;
 exports.rdsSecurityGroupId = rdsSecurityGroup.id;
+exports.ec2InstancePublicIp = ec2Instance.publicIp;
+
 });
 
+
+// sudo systemctl daemon-reload
+//   sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/bin/config.json
+//   sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a start
+//   sudo systemctl enable webapp
