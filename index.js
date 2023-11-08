@@ -252,7 +252,7 @@ const instanceProfile = new aws.iam.InstanceProfile("InstanceProfile", {
 });
 
 const ec2Instance = new aws.ec2.Instance("appEC2Instance", {
-  ami: "ami-068b898a83d2a730c", // Replace with your AMI ID
+  ami: "ami-0f847f666817751e9", // Replace with your AMI ID
   instanceType: "t2.micro",   // Modify as needed
   // securityGroups: [applicationSecurityGroup.name],
   vpcId: vpc.id,
