@@ -387,19 +387,19 @@ const autoScalingGroup = new aws.autoscaling.Group("webAppAutoScalingGroup", {
 autoscalingGroupName: "webAppAutoScaling",
 });
 
+
 autoScalingGroup.id.apply(async (autoscalingGroupId) => {
   const scaleUpPolicy = new aws.autoscaling.Policy("scale-up-policy", {
     scalingAdjustment: 1,
     adjustmentType: "ChangeInCapacity",
-    cooldown: 300,
+    cooldown: 60,
     autoscalingGroupName: autoscalingGroupId,
     
   });
-
   const scaleDownPolicy = new aws.autoscaling.Policy("scale-down-policy", {
     scalingAdjustment: -1,
     adjustmentType: "ChangeInCapacity",
-    cooldown: 300,
+    cooldown: 60,
     autoscalingGroupName: autoscalingGroupId,
   });
 
@@ -594,6 +594,7 @@ const record = new aws.route53.Record("webapproutelink", {
 // exports.ec2InstanceId = ec2Instance.id;
 // exports.rdsSecurityGroupId = rdsSecurityGroup.id;
 // exports.ec2InstancePublicIp = ec2Instance.publicIp;
+
 
 
 
