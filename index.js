@@ -1,6 +1,8 @@
 const pulumi = require("@pulumi/pulumi");
 const aws = require("@pulumi/aws");
-// const AWS = require('aws-sdk');
+const AWS = require('aws-sdk');
+const sns = require("@pulumi/aws/sns");
+const gcp = require("@pulumi/gcp");
 
 // Create a pulumi.Config instance to access configuration settings
 const config = new pulumi.Config();
@@ -97,12 +99,7 @@ const loadBalancerSecurityGroup = new aws.ec2.SecurityGroup("loadBalancerSecurit
           protocol: "tcp",
           cidrBlocks: ["0.0.0.0/0"],
       },
-      {
-        fromPort: 8080, // Add this rule for port 8080
-        toPort: 8080,
-        protocol: "tcp",
-        cidrBlocks: ["0.0.0.0/0"],
-      },
+      
   ],
   egress: [
     {
@@ -123,23 +120,6 @@ const applicationSecurityGroup = new aws.ec2.SecurityGroup("appSecurityGroup", {
     protocol: "tcp",
     cidrBlocks: ["0.0.0.0/0"],
   },
-  //  {
-  //   fromPort: 80,
-  //   toPort: 80,
-  //   protocol: "tcp",
-  //   cidrBlocks: ["0.0.0.0/0"],
-  //   // securityGroupIds: [loadBalancerSecurityGroup.id],
-  // }, {
-  //   fromPort: 443,
-  //   toPort: 443,
-  //   protocol: "tcp",
-  //   cidrBlocks: ["0.0.0.0/0"],
-  // },{
-  //   fromPort: 8080, // Replace with the port your application uses
-  //   toPort: 8080,   // Replace with the port your application uses
-  //   protocol: "tcp",
-  //   cidrBlocks: ["0.0.0.0/0"],
-  // }
   {
     fromPort: 8080, // The port your application uses
     toPort: 8080,
@@ -169,7 +149,7 @@ const applicationSecurityGroup = new aws.ec2.SecurityGroup("appSecurityGroup", {
 
 const rdsSecurityGroup = new aws.ec2.SecurityGroup("rds-security-group", {
   description: "Security group for RDS instances",
-  vpcId: vpc.id, // Replace with your VPC ID
+  vpcId: vpc.id, 
 });
 
 // Create an ingress rule to allow traffic from your application's security group.
@@ -260,8 +240,9 @@ const policy = new aws.iam.Policy("examplePolicy", {
               "cloudwatch:GetMetricData",
               "cloudwatch:GetMetricStatistics",
               "cloudwatch:ListMetrics",
-              "ec2:DescribeTags"
-          ],
+              "ec2:DescribeTags",
+              "sns:Publish"
+               ],
           Resource: "*"
       }
       ],
@@ -313,6 +294,7 @@ const instanceProfile = new aws.iam.InstanceProfile("InstanceProfile", {
 
 
 //   });
+const snsTopic = new aws.sns.Topic("mySnsTopic");
 
 // Create a Target Group for the ALB
 const targetGroup = new aws.lb.TargetGroup("myTargetGroup", {
@@ -330,13 +312,13 @@ const targetGroup = new aws.lb.TargetGroup("myTargetGroup", {
 
 // Define Launch Template parameters
 const launchTemplateName = "Applaunch";
-// const amiId = "ami-05ea7e001691dd131"; // Replace with your custom AMI ID
+// const amiId = "ami-05ea7e001691dd131/"; 
 // const instanceType = "t2.micro";
-// const keyName = "test"; // Replace with your AWS key name
+// const keyName = "test"; 
 // ami-05ea7e001691dd131
 // Create Launch Template
 const launchTemplate = new aws.ec2.LaunchTemplate("Applaunch", {
-  imageId: "ami-0cf5fbcdc6f656e05", // Replace with your AMI ID
+  imageId: "ami-07a3d1ee4987f0acf",
     iamInstanceProfile: {
       arn: instanceProfile.arn,
     },
@@ -356,10 +338,11 @@ const launchTemplate = new aws.ec2.LaunchTemplate("Applaunch", {
     echo DB_USER=csye6225 >> /etc/environment
     echo DB_PASSWORD=abc12345 >> /etc/environment
     echo DB_NAME=csye6225 >> /etc/environment
+    echo SNS_ARN=${snsTopic.arn} >> /etc/environment
     sudo systemctl start webapp
   `.apply(s => Buffer.from(s).toString('base64')),
      tags: {
-      Name: "my-instance", // Set your desired instance name
+      Name: "my-instance",
     }, 
 });
 
@@ -391,7 +374,7 @@ autoScalingGroup.id.apply(async (autoscalingGroupId) => {
   const scaleUpPolicy = new aws.autoscaling.Policy("scale-up-policy", {
     scalingAdjustment: 1,
     adjustmentType: "ChangeInCapacity",
-    cooldown: 300,
+    cooldown: 60,
     autoscalingGroupName: autoscalingGroupId,
     
   });
@@ -399,13 +382,13 @@ autoScalingGroup.id.apply(async (autoscalingGroupId) => {
   const scaleDownPolicy = new aws.autoscaling.Policy("scale-down-policy", {
     scalingAdjustment: -1,
     adjustmentType: "ChangeInCapacity",
-    cooldown: 300,
+    cooldown: 60,
     autoscalingGroupName: autoscalingGroupId,
   });
 
   const highCpuAlarm = new aws.cloudwatch.MetricAlarm("high-cpu-alarm", {
     comparisonOperator: "GreaterThanThreshold",
-    evaluationPeriods: 2, // Add this line
+    evaluationPeriods: 2, 
   metricName: "CPUUtilization",
   namespace: "AWS/EC2",
   period: 120,
@@ -419,7 +402,7 @@ autoScalingGroup.id.apply(async (autoscalingGroupId) => {
 
   const lowCpuAlarm = new aws.cloudwatch.MetricAlarm("low-cpu-alarm", {
     comparisonOperator: "LessThanThreshold",
-    evaluationPeriods: 2, // Add this line
+    evaluationPeriods: 2,
   metricName: "CPUUtilization",
   namespace: "AWS/EC2",
   period: 120,
@@ -430,7 +413,7 @@ autoScalingGroup.id.apply(async (autoscalingGroupId) => {
       AutoScalingGroupName: autoScalingGroup.name,
     },
   });
-});
+});  
 
 // Reference this security group in your load balancer configuration
 // (you should have a load balancer resource where you specify the security groups)
@@ -438,7 +421,6 @@ const loadBalancer = new aws.lb.LoadBalancer("loadBalancer", {
   internal: false, // Set to true if internal, false if external
   securityGroups: [loadBalancerSecurityGroup.id],
   subnets: publicSubnets,
-  // targetGroups: [targetGroup],
   loadBalancerType: "application",
 });
 
@@ -459,9 +441,9 @@ const webAppListener = new aws.lb.Listener("webAppListener", {
 });
 
 
-const domainName = ""; // Replace with your actual domain name
-const port = "8080"; // Replace with your desired port
-const hostedZone = "Z004800715YBRB44PUMAI"; // Replace with the Route 53 hosted zone ID
+const domainName = ""; 
+const port = "8080"; 
+const hostedZone = "Z004800715YBRB44PUMAI";
 // Z004800715YBRB44PUMAI   #demo
 // Z0020495E5MMQXTBZK11
 
@@ -477,125 +459,162 @@ const record = new aws.route53.Record("webapproutelink", {
     zoneId: loadBalancer.zoneId,
     evaluateTargetHealth: true, // Set to true if health checks are required
   }],
-  // ttl: 300,
-  // records: [ec2Instance.publicIp],
-});
+
 });
 
 
 
+// Create a Google Cloud Storage Bucket
+const bucket = new gcp.storage.Bucket("my-bucket-new", {
+  location: "US",
+});
 
+// Create a Google Service Account
+const serviceAccount = new gcp.serviceaccount.Account("my-service-account", {
+  accountId: "my-service-account",
+  displayName: "My Service Account",
+});
 
-// // Attach Auto Scaling Group to Load Balancer
-// const attachLoadBalancer = new aws.autoscaling.Attachment("webAppAttachLoadBalancer", {
-//   autoscalingGroupName: autoScalingGroup.name,
-//   albTargetGroupArn: loadBalancer.targetGroup.arn,
+const accessKey = new gcp.serviceaccount.Key("myAccessKey", {
+    serviceAccountId: serviceAccount.accountId,
+});
+// const serviceAccountEmail = serviceAccount.email.apply(email => email);
+
+const serviceAccountEmail = config.require("serviceAccountEmail");
+const project = config.require("project");
+
+// const service_policy = gcp.organizations.getIAMPolicy({
+//     bindings: [
+//         {
+//             role: "roles/storage.admin",
+//             members: [`serviceAccount:${serviceAccountEmail}`],
+//         },
+//     ],
+//     resource: `projects/${project}`,
 // });
 
-// Update security group for the Auto Scaling Group
-// const updateSecurityGroup = new aws.autoscaling.Group("webAppAutoScalingGroup", {
-//   // ... other configurations ...
-//   vpcZoneIdentifiers: [...privateSubnets.map(subnet => subnet.id),
-//     ...publicSubnets.map(subnet => subnet.id),
-// ],
-//   launchTemplate: {
-//       id: launchTemplate.id,
-//       version: "$Latest",
-//   },
-//   healthCheckType: "EC2",
-//   healthCheckGracePeriod: 300,
-//   forceDelete: true,
-//   vpcZoneIdentifiers: [...privateSubnets.map(subnet => subnet.id),
-//     ...publicSubnets.map(subnet => subnet.id),
-// ],
-//   launchTemplate: {
-//       id: launchTemplate.id,
-//       version: "$Latest",
-//   },
-//   healthCheckType: "EC2",
-//   healthCheckGracePeriod: 300,
-//   forceDelete: true,
+// const updatedPolicy = pulumi.all([service_policy, serviceAccountEmail]).apply(([currentPolicy, email]) => {
+//     if (!currentPolicy.bindings) {
+//         currentPolicy.bindings = [];
+//     }
+
+//     currentPolicy.bindings.push({
+//         role: "roles/storage.admin",
+//         members: [`serviceAccount:${email}`],
+//     });
+
+//     return currentPolicy;
 // });
 
-// // Create Scale Up Policy
-// const scaleUpPolicy = new aws.autoscaling.Policy("scaleUpPolicy", {
-//   scalingAdjustment: 1,
-//   adjustmentType: "ChangeInCapacity",
-//   cooldown: 60,
-//   estimatedInstanceWarmup: 300, // 300 seconds (5 minutes)
-//   metricAggregationType: "Average",
-//   name: "scale-up-policy",
-//   scalingTargetId: autoScalingGroup.id,
-//   targetTrackingConfiguration: {
-//     predefinedMetricSpecification: {
-//       predefinedMetricType: "ASGAverageCPUUtilization",
-//     },
-//     targetValue: 5,
-//   },
+// const setPolicy = new gcp.organizations.getIAMPolicy("setStorageAdminPolicy", {
+//     policyData: updatedPolicy,
+//     resource: `projects/${project}`,
+// });
+ 
+// Grant permissions to the Service Account for the bucket
+const bucketIAMBinding = new gcp.storage.BucketIAMBinding("bucketIamBinding", {
+    bucket: bucket.name,
+    role: "roles/storage.objectAdmin", // Role granting storage.objects.create permission
+    members: [ `serviceAccount:${serviceAccountEmail}` ],
+});
+
+// Lambda Function
+
+// DynamoDB Table
+// const dynamoTable = new aws.dynamodb.Table("myDynamoDBTable", {
+//     // Your DynamoDB table configuration here...
 // });
 
-// // Create Scale Down Policy
-// const scaleDownPolicy = new aws.autoscaling.Policy("scaleDownPolicy", {
-//   scalingAdjustment: -1,
-//   adjustmentType: "ChangeInCapacity",
-//   cooldown: 60,
-//   estimatedInstanceWarmup: 300,
-//   metricAggregationType: "Average",
-//   name: "scale-down-policy",
-//   scalingTargetId: autoScalingGroup.id,
-//   targetTrackingConfiguration: {
-//     predefinedMetricSpecification: {
-//       predefinedMetricType: "ASGAverageCPUUtilization",
-//     },
-//     targetValue: 3,
-//   },
-// });
-// const attachAutoScalingGroupToTargetGroup = new aws.autoscaling.Attachment("attachAutoScalingGroupToTargetGroup", {
-//   targetGroupArn: targetGroup.arn,
-//   autoscalingGroupName: autoScalingGroup.name,
-// });
+const lambdaRole = new aws.iam.Role("lambdaRole", {
+  assumeRolePolicy: JSON.stringify({
+    Version: "2012-10-17",
+    Statement: [{
+      Action: "sts:AssumeRole",
+      Effect: "Allow",
+      Principal: {
+        Service: "lambda.amazonaws.com",
+      },
+    }],
+  }),
+});
 
+// Attach the AWSLambdaBasicExecutionRole policy to the Lambda role
+const executionRolePolicyAttachment = new aws.iam.RolePolicyAttachment("executionRolePolicyAttachment", {
+  role: lambdaRole,
+  policyArn: "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+});
 
+const nodeModulesLayer = new aws.lambda.LayerVersion("nodeModulesLayer", {
+  layerName: "myNodeModulesLayer",
+  code: new pulumi.asset.AssetArchive({
+      "nodejs": new pulumi.asset.FileArchive("../serverless/nodejs")
+  }),
+  compatibleRuntimes: ["nodejs18.x"],
+});
+const lambdaFunc = new aws.lambda.Function("myLambdaFunction", {
+  runtime: aws.lambda.Runtime.NodeJS18dX,
+  layers: [nodeModulesLayer.arn],
+  handler: "index.handler",
+  role: lambdaRole.arn,
+  code: new pulumi.asset.FileArchive("../serverless"),
+  environment: {
+    variables: {
+      // Set environment variables for the Lambda function
+      GCP_PROJECT: 'snappy-meridian-406523',
+      GCP_BUCKET_NAME: bucket.name,
+      GCP_SERVICE_ACCOUNT_KEY: accessKey.privateKey,
+      MAILGUN_API_KEY: '53e60c46929e8bca7faa6f75f36c1783-30b58138-3d898205',
+      MAILGUN_DOMAIN:'demo.csye6225sp.com'
+    },
+  },
+});
 
-// Create Listener for HTTP traffic
-// const httpListener = new aws.lb.Listener("httpListener", {
-//   defaultActions: [{
-//     type: "fixed-response",
-//     fixedResponse: {
-//       contentType: "text/plain",
-//       messageBody: "OK",
-//       statusCode: "200",
-//     },
-//   }],
-//   loadBalancerArn: loadBalancer.arn,
-//   port: 80,
-//   protocol: "HTTP",
-// });
+// Create a subscription to the SNS topic that triggers the Lambda function
+const lambdaSubscription = new aws.sns.TopicSubscription("lambdaSubscription", {
+  topic: snsTopic.arn,
+  protocol: "lambda",
+  endpoint: lambdaFunc.arn,
+});
 
+// Attach a basic Lambda execution policy to the role
+const lambdaPolicy = new aws.iam.RolePolicy("lambdaPolicy", {
+  role: lambdaRole,
+  policy: {
+      Version: "2012-10-17",
+      Statement: [{
+          Action: "dynamodb:*",
+          Effect: "Allow",
+          Resource: "*"
+      }],
+  },
+});
 
+// Grant the SNS service permission to invoke the Lambda function
+const lambdaPermission = new aws.lambda.Permission("lambdaPermission", {
+  action: "lambda:InvokeFunction",
+  function: lambdaFunc.name,
+  principal: "sns.amazonaws.com",
+  sourceArn: snsTopic.arn,
+});
 
+// Create a DynamoDB table for tracking emails
 
+const emailDynamo = new aws.dynamodb.Table("emailTable", {
+attributes: [
+  { name: "Id", type: "S" },
+],
+hashKey: "Id",
+billingMode: "PAY_PER_REQUEST",
+name: "emailTable"
+});
 
-// // Export Auto Scaling Group name for reference
-// exports.autoScalingGroupName = autoScalingGroup.name;
+});
 
-
-// // Export Launch Template ID for reference
-// exports.launchTemplateId = launchTemplate.id;
-
-// // Optionally, you can export the ID of the load balancer security group for future use
-// exports.loadBalancerSecurityGroupId = loadBalancerSecurityGroup.id;
-
-
-// // Export the instance profile name and role name
-// exports.roleName = role.name;
-// // Export values for reference
-// exports.applicationSecurityGroupId = applicationSecurityGroup.id;
-// exports.ec2InstanceId = ec2Instance.id;
-// exports.rdsSecurityGroupId = rdsSecurityGroup.id;
-// exports.ec2InstancePublicIp = ec2Instance.publicIp;
-
-
-
+// export const serviceAccountEmail = serviceAccountEmail.email;
+// export const serviceAccountKey = serviceAccountKey.privateKey;
+// export const projectId = pulumi.getProject();
+// Export the service account email
+// Await the privateKey promise and then export the service account private key as a secret
+// Export the service account email
 
 
