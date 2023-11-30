@@ -121,7 +121,7 @@ const applicationSecurityGroup = new aws.ec2.SecurityGroup("appSecurityGroup", {
     cidrBlocks: ["0.0.0.0/0"],
   },
   {
-    fromPort: 8080, // The port your application uses
+    fromPort: 8080, 
     toPort: 8080,
     protocol: "tcp",
     securityGroups: [loadBalancerSecurityGroup.id], // Only accept traffic from the load balancer security group
@@ -138,7 +138,7 @@ const applicationSecurityGroup = new aws.ec2.SecurityGroup("appSecurityGroup", {
     fromPort: 443, // HTTPS (CloudWatch Logs endpoint)
     toPort: 443,   // HTTPS (CloudWatch Logs endpoint)
     protocol: "tcp",
-    cidrBlocks: ["0.0.0.0/0"], // Allow outbound traffic to the internet
+    cidrBlocks: ["0.0.0.0/0"], 
   },
 ],
 
@@ -158,7 +158,7 @@ const ingressRule = new aws.ec2.SecurityGroupRule("rds-ingress-rule", {
   fromPort: 3306, // Change to 5432 for PostgreSQL
   toPort: 3306, // Change to 5432 for PostgreSQL
   protocol: "tcp",
-  sourceSecurityGroupId: applicationSecurityGroup.id, // Replace with your app's security group ID
+  sourceSecurityGroupId: applicationSecurityGroup.id,
   securityGroupId: rdsSecurityGroup.id,
 });
 
@@ -209,7 +209,7 @@ const rds_instance = new aws.rds.Instance("csye6225", {
 const ec2Subnet = publicSubnets[0]
 // Create an IAM role
 const role = new aws.iam.Role("myIAMRole", {
-  name: "my-iam-role", // Replace with your desired name
+  name: "my-iam-role", 
   assumeRolePolicy: JSON.stringify({
       Version: "2012-10-17",
       Statement: [
@@ -217,7 +217,7 @@ const role = new aws.iam.Role("myIAMRole", {
               Action: "sts:AssumeRole",
               Effect: "Allow",
               Principal: {
-                  Service: "ec2.amazonaws.com" // or other trusted services
+                  Service: "ec2.amazonaws.com"
               }
           }
       ]
@@ -303,7 +303,7 @@ const targetGroup = new aws.lb.TargetGroup("myTargetGroup", {
   targetType: "instance",
   healthCheck: {
     path: "/healthz",
-    port: "8080", // Use the actual port where your application is running
+    port: "8080",
     matcher: "200",
     protocol: "HTTP",
   },
@@ -312,7 +312,7 @@ const targetGroup = new aws.lb.TargetGroup("myTargetGroup", {
 
 // Define Launch Template parameters
 const launchTemplateName = "Applaunch";
-// const amiId = "ami-05ea7e001691dd131/"; 
+// const amiId = "ami-05ea7e001691dd131/ami-07a3d1ee4987f0acf"; 
 // const instanceType = "t2.micro";
 // const keyName = "test"; 
 // ami-05ea7e001691dd131
@@ -427,11 +427,11 @@ const loadBalancer = new aws.lb.LoadBalancer("loadBalancer", {
 
 // Create a listener for the ALB
 const webAppListener = new aws.lb.Listener("webAppListener", {
-  loadBalancerArn: loadBalancer.arn, // Reference to the ALB you just created
-  port: 80, // Port to listen on
+  loadBalancerArn: loadBalancer.arn,
+  port: 80,
   defaultActions: [{
       type: "forward",
-      targetGroupArn: targetGroup.arn, // Reference to the target group
+      targetGroupArn: targetGroup.arn,
   }],
   fixedResponse: {
           contentType: "application/json",
