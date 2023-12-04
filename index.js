@@ -4,6 +4,7 @@ const AWS = require('aws-sdk');
 const sns = require("@pulumi/aws/sns");
 const gcp = require("@pulumi/gcp");
 
+
 // Create a pulumi.Config instance to access configuration settings
 const config = new pulumi.Config();
 // Use configuration settings or provide defaults
@@ -100,6 +101,7 @@ const loadBalancerSecurityGroup = new aws.ec2.SecurityGroup("loadBalancerSecurit
           cidrBlocks: ["0.0.0.0/0"],
       },
       
+
   ],
   egress: [
     {
@@ -348,7 +350,6 @@ autoScalingGroup.id.apply(async (autoscalingGroupId) => {
     autoscalingGroupName: autoscalingGroupId,
     
   });
-
   const scaleDownPolicy = new aws.autoscaling.Policy("scale-down-policy", {
     scalingAdjustment: -1,
     adjustmentType: "ChangeInCapacity",
@@ -392,8 +393,6 @@ const loadBalancer = new aws.lb.LoadBalancer("loadBalancer", {
   subnets: publicSubnets,
   loadBalancerType: "application",
 });
-
-
 
 const domainName = ""; 
 const port = "8080"; 
@@ -537,6 +536,7 @@ const webAppHttpsListener = new aws.lb.Listener("webAppHttpsListener", {
   }],
 });
 });
+
 
 
 
