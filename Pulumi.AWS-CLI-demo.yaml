@@ -2,12 +2,17 @@ encryptionsalt: v1:AwGOVccgR+E=:v1:Hme03oFwKYUIfbMM:L74exjR3Gijz4mMYAFTfRSJAMBSg
 config:
   aws:profile: AWS-CLI-demo
   aws:region: us-east-1
+  gcp:project: snappy-meridian-406523
   iac-pulumi1:cidr: "10.0"
   iac-pulumi1:cidrEnd: 0/24
   iac-pulumi1:internetGatewayName: my-igw
   iac-pulumi1:privateRouteTableName: private-route-table
+  iac-pulumi1:project: snappy-meridian-406523
   iac-pulumi1:publicRouteCidrBlock: 0.0.0.0/0
   iac-pulumi1:publicRouteTableName: public-route-table
+  iac-pulumi1:serviceAccountEmail: my-service-account@snappy-meridian-406523.iam.gserviceaccount.com
   iac-pulumi1:vpcCidr: 10.0.0.0/16
   iac-pulumi1:vpcName: my-vpc
-  
+  iac-pulumi1:hostedZone: Z004800715YBRB44PUMAI
+  iac-pulumi1:MAILGUN_API_KEY: 53e60c46929e8bca7faa6f75f36c1783-30b58138-3d898205
+  iac-pulumi1:MAILGUN_DOMAIN: demo.csye6225sp.com
