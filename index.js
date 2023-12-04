@@ -241,7 +241,8 @@ const policy = new aws.iam.Policy("examplePolicy", {
               "cloudwatch:GetMetricStatistics",
               "cloudwatch:ListMetrics",
               "ec2:DescribeTags",
-              "sns:Publish"
+              "sns:Publish",
+              "ec2:DescribeLaunchTemplates"
                ],
           Resource: "*"
       }
@@ -262,38 +263,7 @@ const instanceProfile = new aws.iam.InstanceProfile("InstanceProfile", {
   name: "WebApp",
 });
 // ami-0f847f666817751e9
-// const ec2Instance = new aws.ec2.Instance("appEC2Instance", {
-//   ami: "ami-05ea7e001691dd131", // Replace with your AMI ID
-//   instanceType: "t2.micro",   // Modify as needed
-//   // securityGroups: [applicationSecurityGroup.name],
-//   vpcId: vpc.id,
-//   // iamInstanceProfile: role.name,
-//   rootBlockDevice: {
-//     volumeSize: 25,             // Root Volume Size
-//     volumeType: "gp2",         // Root Volume Type
-//     deleteOnTermination: true, // Ensure EBS volumes are terminated when the instance is terminated
 
-//   },
-//   keyName: "test",
-//   vpcSecurityGroupIds: [applicationSecurityGroup.id],
-//   subnetId: ec2Subnet.id,
-//   iamInstanceProfile: instanceProfile.name,
-//   userData: pulumi.interpolate`
-//   #!/bin/bash
-//   echo "NODE_ENV=production" >> /etc/environment
-//   endpoint="${rds_instance.endpoint}"
-//   echo "DB_HOST=\${endpoint%:*}" >> /etc/environment
-//   echo DB_USER=csye6225 >> /etc/environment
-//   echo DB_PASSWORD=abc12345 >> /etc/environment
-//   echo DB_NAME=csye6225 >> /etc/environment
-//   sudo systemctl start webapp
-// `.apply(s => s.trim()),
-//    tags: {
-//     Name: "my-instance", // Set your desired instance name
-//   },
-
-
-//   });
 const snsTopic = new aws.sns.Topic("mySnsTopic");
 
 // Create a Target Group for the ALB
@@ -318,7 +288,7 @@ const launchTemplateName = "Applaunch";
 // ami-05ea7e001691dd131
 // Create Launch Template
 const launchTemplate = new aws.ec2.LaunchTemplate("Applaunch", {
-  imageId: "ami-07a3d1ee4987f0acf",
+  imageId: "ami-0748cbb5bb04c884e",
     iamInstanceProfile: {
       arn: instanceProfile.arn,
     },
@@ -416,7 +386,6 @@ autoScalingGroup.id.apply(async (autoscalingGroupId) => {
 });  
 
 // Reference this security group in your load balancer configuration
-// (you should have a load balancer resource where you specify the security groups)
 const loadBalancer = new aws.lb.LoadBalancer("loadBalancer", {
   internal: false, // Set to true if internal, false if external
   securityGroups: [loadBalancerSecurityGroup.id],
@@ -425,21 +394,6 @@ const loadBalancer = new aws.lb.LoadBalancer("loadBalancer", {
 });
 
 
-// Create a listener for the ALB
-const webAppListener = new aws.lb.Listener("webAppListener", {
-  loadBalancerArn: loadBalancer.arn,
-  port: 80,
-  defaultActions: [{
-      type: "forward",
-      targetGroupArn: targetGroup.arn,
-  }],
-  fixedResponse: {
-          contentType: "application/json",
-          messageBody: "OK",
-          statusCode: "200",
-        },
-});
-
 
 const domainName = ""; 
 const port = "8080"; 
@@ -447,22 +401,18 @@ const hostedZone = "Z004800715YBRB44PUMAI";
 // Z004800715YBRB44PUMAI   #demo
 // Z0020495E5MMQXTBZK11
 
-
-
 const record = new aws.route53.Record("webapproutelink", {
   // name: domainName,
-  name: "demo.csye6225sp.com",
+  name: "",
   type: "A",
   zoneId: hostedZone,
   aliases: [{
-    name: loadBalancer.dnsName, // Use loadBalancer instead of applicationLoadBalancer
+    name: loadBalancer.dnsName, 
     zoneId: loadBalancer.zoneId,
-    evaluateTargetHealth: true, // Set to true if health checks are required
+    evaluateTargetHealth: true, 
   }],
 
 });
-
-
 
 // Create a Google Cloud Storage Bucket
 const bucket = new gcp.storage.Bucket("my-bucket-new", {
@@ -482,34 +432,6 @@ const accessKey = new gcp.serviceaccount.Key("myAccessKey", {
 
 const serviceAccountEmail = config.require("serviceAccountEmail");
 const project = config.require("project");
-
-// const service_policy = gcp.organizations.getIAMPolicy({
-//     bindings: [
-//         {
-//             role: "roles/storage.admin",
-//             members: [`serviceAccount:${serviceAccountEmail}`],
-//         },
-//     ],
-//     resource: `projects/${project}`,
-// });
-
-// const updatedPolicy = pulumi.all([service_policy, serviceAccountEmail]).apply(([currentPolicy, email]) => {
-//     if (!currentPolicy.bindings) {
-//         currentPolicy.bindings = [];
-//     }
-
-//     currentPolicy.bindings.push({
-//         role: "roles/storage.admin",
-//         members: [`serviceAccount:${email}`],
-//     });
-
-//     return currentPolicy;
-// });
-
-// const setPolicy = new gcp.organizations.getIAMPolicy("setStorageAdminPolicy", {
-//     policyData: updatedPolicy,
-//     resource: `projects/${project}`,
-// });
  
 // Grant permissions to the Service Account for the bucket
 const bucketIAMBinding = new gcp.storage.BucketIAMBinding("bucketIamBinding", {
@@ -519,12 +441,6 @@ const bucketIAMBinding = new gcp.storage.BucketIAMBinding("bucketIamBinding", {
 });
 
 // Lambda Function
-
-// DynamoDB Table
-// const dynamoTable = new aws.dynamodb.Table("myDynamoDBTable", {
-//     // Your DynamoDB table configuration here...
-// });
-
 const lambdaRole = new aws.iam.Role("lambdaRole", {
   assumeRolePolicy: JSON.stringify({
     Version: "2012-10-17",
@@ -608,13 +524,20 @@ billingMode: "PAY_PER_REQUEST",
 name: "emailTable"
 });
 
+// HTTPS Listener for the Application Load Balancer
+const webAppHttpsListener = new aws.lb.Listener("webAppHttpsListener", {
+  loadBalancerArn: loadBalancer.arn,
+  port: 443,
+  protocol: "HTTPS",
+  sslPolicy: "ELBSecurityPolicy-2016-08",
+  certificateArn: "arn:aws:acm:us-east-1:143282580221:certificate/fd858497-7361-47a4-b569-11a9541a4ae3",
+  defaultActions: [{
+      type: "forward",
+      targetGroupArn: targetGroup.arn,
+  }],
+});
 });
 
-// export const serviceAccountEmail = serviceAccountEmail.email;
-// export const serviceAccountKey = serviceAccountKey.privateKey;
-// export const projectId = pulumi.getProject();
-// Export the service account email
-// Await the privateKey promise and then export the service account private key as a secret
-// Export the service account email
+
 
 
